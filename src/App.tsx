@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { StoreProvider } from './context/StoreContext';
 import { Navbar } from './components/Navbar';
 import { CartDrawer } from './components/CartDrawer';
@@ -20,46 +20,124 @@ import { AccountPage } from './pages/AccountPage';
 import { PolicyPages } from './pages/PolicyPages';
 import { AdminDashboard } from './pages/admin/AdminDashboard';
 
+const KNOWN_ROUTES = [
+  '/shop',
+  '/products',
+  '/collections',
+  '/checkout',
+  '/order-confirmation',
+  '/track-order',
+  '/our-story',
+  '/journal',
+  '/wishlist',
+  '/account',
+  '/contact',
+  '/faq',
+  '/shipping-policy',
+  '/returns-policy',
+  '/privacy-policy',
+  '/terms',
+  '/admin'
+];
+
+/**
+ * Extracts normalized route & search params regardless of whether the app is hosted
+ * on root (e.g. localhost, Cloud Run) or a subfolder on GitHub Pages (e.g. username.github.io/repo-name/)
+ */
+function parseLocation(): { path: string; search: URLSearchParams } {
+  // 1. Check if hash routing is present (e.g. #/shop or #/products/sandalwood)
+  if (window.location.hash) {
+    const raw = window.location.hash.replace(/^#\/?/, '/');
+    const [hPath, hQuery] = raw.split('?');
+    return {
+      path: hPath.startsWith('/') ? hPath : '/' + hPath,
+      search: new URLSearchParams(hQuery || '')
+    };
+  }
+
+  // 2. Otherwise inspect pathname
+  let pathname = window.location.pathname || '/';
+
+  // If path directly starts with one of our known route prefixes, use it directly
+  if (pathname === '/' || KNOWN_ROUTES.some(prefix => pathname.startsWith(prefix))) {
+    return {
+      path: pathname,
+      search: new URLSearchParams(window.location.search)
+    };
+  }
+
+  // If deployed under a GitHub Pages repository subpath like /<repo-name>/...
+  const segments = pathname.split('/').filter(Boolean);
+  if (segments.length >= 1) {
+    // If the first segment is not a known route, it is the repo name
+    if (!KNOWN_ROUTES.some(prefix => ('/' + segments[0]).startsWith(prefix))) {
+      const remainingPath = '/' + segments.slice(1).join('/');
+      return {
+        path: remainingPath === '' ? '/' : remainingPath,
+        search: new URLSearchParams(window.location.search)
+      };
+    }
+  }
+
+  return {
+    path: pathname,
+    search: new URLSearchParams(window.location.search)
+  };
+}
+
 export function AppContent() {
-  const [currentRoute, setCurrentRoute] = useState<string>(() => {
-    return window.location.pathname || '/';
-  });
-  const [searchParams, setSearchParams] = useState<URLSearchParams>(() => {
-    return new URLSearchParams(window.location.search);
-  });
+  const [routeState, setRouteState] = useState(parseLocation);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
 
+  const currentRoute = routeState.path;
+  const searchParams = routeState.search;
+
   useEffect(() => {
-    const handlePopState = () => {
-      setCurrentRoute(window.location.pathname || '/');
-      setSearchParams(new URLSearchParams(window.location.search));
+    const handleLocationChange = () => {
+      setRouteState(parseLocation());
     };
 
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
+    window.addEventListener('popstate', handleLocationChange);
+    window.addEventListener('hashchange', handleLocationChange);
+
+    return () => {
+      window.removeEventListener('popstate', handleLocationChange);
+      window.removeEventListener('hashchange', handleLocationChange);
+    };
   }, []);
 
-  const navigate = (pathWithQuery: string) => {
-    const [path, query] = pathWithQuery.split('?');
-    window.history.pushState({}, '', pathWithQuery);
-    setCurrentRoute(path || '/');
-    setSearchParams(new URLSearchParams(query || ''));
+  const navigate = useCallback((pathWithQuery: string) => {
+    const clean = pathWithQuery.startsWith('/') ? pathWithQuery : '/' + pathWithQuery;
+
+    // Detect if we are on a GitHub Pages subpath (e.g. /<repo-name>/)
+    const isSubfolder =
+      window.location.pathname.length > 1 &&
+      !KNOWN_ROUTES.some(prefix => window.location.pathname.startsWith(prefix));
+
+    if (window.location.hash || isSubfolder) {
+      // Use hash navigation on GitHub Pages so static server never returns 404 on refresh
+      window.location.hash = clean;
+    } else {
+      window.history.pushState({}, '', clean);
+      setRouteState(parseLocation());
+    }
+
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
+  }, []);
 
   // Route matching
   const isAdmin = currentRoute.startsWith('/admin');
 
   // Match /products/:slug
-  const productMatch = currentRoute.match(/^\/products\/([^/]+)/);
+  const productMatch = currentRoute.match(/^\/products\/([^/?]+)/);
   const productSlug = productMatch ? productMatch[1] : null;
 
   // Match /collections/:slug
-  const collectionMatch = currentRoute.match(/^\/collections\/([^/]+)/);
+  const collectionMatch = currentRoute.match(/^\/collections\/([^/?]+)/);
   const collectionSlug = collectionMatch ? collectionMatch[1] : null;
 
   // Match /journal/:slug
-  const journalMatch = currentRoute.match(/^\/journal\/([^/]+)/);
+  const journalMatch = currentRoute.match(/^\/journal\/([^/?]+)/);
   const journalSlug = journalMatch ? journalMatch[1] : null;
 
   const renderCurrentPage = () => {
