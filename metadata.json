@@ -1,0 +1,8 @@
+{
+  "name": "Fagun Perfumers",
+  "description": "Premium Indian Incense & Dhoop E-Commerce Platform crafted for moments of devotion, stillness, and everyday ritual.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
