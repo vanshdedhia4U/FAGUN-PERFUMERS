@@ -66,9 +66,19 @@ function parseLocation(): { path: string; search: URLSearchParams } {
     };
   }
 
-  // If deployed under a GitHub Pages repository subpath like /<repo-name>/...
+  // If deployed under a GitHub Pages repository subpath like /<repo-name>/... or /<repo-name>/docs/...
   const segments = pathname.split('/').filter(Boolean);
   if (segments.length >= 1) {
+    // If 'docs' is in the path, extract route after 'docs'
+    const docsIdx = segments.indexOf('docs');
+    if (docsIdx !== -1) {
+      const remainingPath = '/' + segments.slice(docsIdx + 1).join('/');
+      return {
+        path: remainingPath === '' ? '/' : remainingPath,
+        search: new URLSearchParams(window.location.search)
+      };
+    }
+
     // If the first segment is not a known route, it is the repo name
     if (!KNOWN_ROUTES.some(prefix => ('/' + segments[0]).startsWith(prefix))) {
       const remainingPath = '/' + segments.slice(1).join('/');
